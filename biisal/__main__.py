@@ -26,13 +26,12 @@ logging.getLogger("aiohttp.web").setLevel(logging.ERROR)
 
 ppath = "biisal/bot/plugins/*.py"
 files = glob.glob(ppath)
-StreamBot.start()
-loop = asyncio.get_event_loop()
 
 
 async def start_services():
     print('\n')
     print('------------------- Initalizing Telegram Bot -------------------')
+    await StreamBot.start()
     bot_info = await StreamBot.get_me()
     StreamBot.username = bot_info.username
     print("------------------------------ DONE ------------------------------")
@@ -86,6 +85,6 @@ async def start_services():
 
 if __name__ == '__main__':
     try:
-        loop.run_until_complete(start_services())
+        asyncio.run(start_services())
     except KeyboardInterrupt:
         logging.info('----------------------- Service Stopped -----------------------')

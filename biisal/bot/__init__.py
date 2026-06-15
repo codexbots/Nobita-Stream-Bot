@@ -9,7 +9,8 @@ StreamBot = Client(
     api_hash=Var.API_HASH,
     bot_token=Var.BOT_TOKEN,
     sleep_threshold=Var.SLEEP_THRESHOLD,
-    workers=Var.WORKERS
+    workers=Var.WORKERS,
+    in_memory=True
 )
 
 multi_clients = {}

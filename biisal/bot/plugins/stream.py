@@ -13,10 +13,11 @@ from biisal.utils.human_readable import humanbytes
 from biisal.vars import Var
 from urllib.parse import quote_plus
 from pyrogram import filters, Client
-from pyrogram.errors import FloodWait, UserNotParticipant
+from pyrogram.errors import FloodWait
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 from biisal.utils.file_properties import get_name, get_hash, get_media_file_size
+from biisal.utils.channel_check import is_user_allowed
 db = Database(Var.DATABASE_URL, Var.name)
 
 def generate_random_alphanumeric(): 
@@ -37,6 +38,15 @@ MY_PASS = os.environ.get("MY_PASS", None)
 pass_dict = {}
 pass_db = Database(Var.DATABASE_URL, "ag_passwords")
 
+
+async def self_cleanup(*messages, delay):
+    await asyncio.sleep(delay)
+    for msg in messages:
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+
 msg_text ="""
 <b>ʏᴏᴜʀ ʟɪɴᴋ ɪs ɢᴇɴᴇʀᴀᴛᴇᴅ...⚡</b>
 
@@ -56,55 +66,24 @@ async def private_receive_handler(c: Client, m: Message):
             Var.NEW_USER_LOG,
             f"#𝐍𝐞𝐰𝐔𝐬𝐞𝐫\n\n**᚛› 𝐍𝐚𝐦𝐞 - [{m.from_user.first_name}](tg://user?id={m.from_user.id})**"
         )
-    if Var.UPDATES_CHANNEL != "None":
-        try:
-            user = await c.get_chat_member(Var.UPDATES_CHANNEL, m.chat.id)
-            if user.status == "kicked":
-                await c.send_message(
-                    chat_id=m.chat.id,
-                    text="You are banned!\n\n  Contact Developer [Rahul](https://telegram.me/CallOwnerBot) he will help you.",
-                    disable_web_page_preview=True
-                )
-                return 
-        except UserNotParticipant:
-            await c.send_photo(
-                chat_id=m.chat.id,
-                photo="https://graph.org/file/a8095ab3c9202607e78ad.jpg",
-                caption="""<b>ᴊᴏɪɴ ᴏᴜʀ ᴜᴘᴅᴀᴛᴇs ᴄʜᴀɴɴᴇʟ ᴛᴏ ᴜꜱᴇ ᴍᴇ</b>""",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton("ᴊᴏɪɴ ɴᴏᴡ 🚩", url=f"https://telegram.me/{Var.UPDATES_CHANNEL}")
-                        ]
-                    ]
-                ),
-            )
-            return
-        except Exception as e:
-            await m.reply_text(e)
-            await c.send_message(
-                chat_id=m.chat.id,
-                text="sᴏᴍᴇᴛʜɪɴɢ ᴡᴇɴᴛ ᴡʀᴏɴɢ. ᴄᴏɴᴛᴀᴄᴛ ᴍʏ [ʙᴏss](https://telegram.me/CallOwnerBot)",
-                disable_web_page_preview=True
-            )
-            return
+    if not await is_user_allowed(c, m):
+        return
     ban_chk = await db.is_banned(int(m.from_user.id))
     if ban_chk == True:
         return await m.reply(Var.BAN_ALERT)
 
-    try:  # This is the outer try block
+    try:
         log_msg = await m.copy(chat_id=Var.BIN_CHANNEL)
         stream_link = f"{Var.URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
         online_link = f"{Var.URL}{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
-        try:  # This is the inner try block
-            if Var.SHORTLINK:
+        stream = stream_link
+        download = online_link
+        if Var.SHORTLINK:
+            try:
                 stream = get_shortlink(stream_link)
                 download = get_shortlink(online_link)
-            else:
-                stream = stream_link
-                download = online_link
-        except Exception as e:
-            print(f"An error occurred: {e}")
+            except Exception as e:
+                print(f"Shortlink error, using direct links: {e}")
 
         a = await log_msg.reply_text(
             text=f"ʀᴇǫᴜᴇꜱᴛᴇᴅ ʙʏ : [{m.from_user.first_name}](tg://user?id={m.from_user.id})\nUꜱᴇʀ ɪᴅ : {m.from_user.id}\nStream ʟɪɴᴋ : {stream_link}",
@@ -120,18 +99,9 @@ async def private_receive_handler(c: Client, m: Message):
             ])
         )
 
-        await m.delete()  # Delete the original message after processing
+        await m.delete()
 
-        # Wait for 6 hours (21600 seconds)
-        await asyncio.sleep(21600)  # Sleep for 6 hours
-
-        # After 6 hours, delete `log_msg`, `a`, and `k`
-        try:
-            await log_msg.delete()
-            await a.delete()
-            await k.delete()
-        except Exception as e:
-            print(f"Error during deletion: {e}")
+        asyncio.create_task(self_cleanup(log_msg, a, k, 21600))
 
     except FloodWait as e:
         print(f"Sleeping for {str(e.x)}s")
@@ -151,15 +121,14 @@ async def channel_receive_handler(bot, broadcast):
         log_msg = await broadcast.forward(chat_id=Var.BIN_CHANNEL)
         stream_link = f"{Var.URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
         online_link = f"{Var.URL}{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
-        try:  # This is the inner try block
-            if Var.SHORTLINK:
+        stream = stream_link
+        download = online_link
+        if Var.SHORTLINK:
+            try:
                 stream = get_shortlink(stream_link)
                 download = get_shortlink(online_link)
-            else:
-                stream = stream_link
-                download = online_link
-        except Exception as e:
-            print(f"An error occurred: {e}")
+            except Exception as e:
+                print(f"Shortlink error, using direct links: {e}")
 
         await log_msg.reply_text(
             text=f"**Channel Name:** `{broadcast.chat.title}`\n**CHANNEL ID:** `{broadcast.chat.id}`\n**Rᴇǫᴜᴇsᴛ ᴜʀʟ:** {stream_link}",

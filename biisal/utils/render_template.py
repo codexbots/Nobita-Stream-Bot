@@ -32,8 +32,8 @@ async def render_page(id, secure_hash, src=None):
             async with s.get(src) as u:
                 file_size = humanbytes(int(u.headers.get("Content-Length")))
 
-    with open(template_file) as f:
-        template = jinja2.Template(f.read())
+    async with aiofiles.open(template_file) as f:
+        template = jinja2.Template(await f.read())
 
     file_name = file_data.file_name.replace("_", " ")
 
